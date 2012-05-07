@@ -35,15 +35,6 @@
 
 vtkStandardNewMacro(vtkPolyData);
 
-//----------------------------------------------------------------------------
-// Initialize static member.  This member is used to simplify traversal
-// of verts, lines, polygons, and triangle strips lists.  It basically
-// "marks" empty lists so that the traveral method "GetNextCell"
-// works properly.
-vtkCellArray *vtkPolyData::Dummy = NULL;
-
-static vtkSimpleCriticalSection DummyCritSect;
-
 vtkPolyData::vtkPolyData ()
 {
   // Create these guys only when needed. This saves a huge amount
@@ -69,18 +60,9 @@ vtkPolyData::vtkPolyData ()
   this->Information->Set(vtkDataObject::DATA_NUMBER_OF_GHOST_LEVELS(), 0);
 
   // static variable, initialized only once.
-  DummyCritSect.Lock();
-  if (this->Dummy == NULL)
-    {
-    this->Dummy = vtkCellArray::New();
-    this->Dummy->Register(this);
-    this->Dummy->Delete();
-    }
-  else
-    {
-    this->Dummy->Register(this);
-    }
-  DummyCritSect.Unlock();
+  this->Dummy = vtkCellArray::New();
+  this->Dummy->Register(this);
+  this->Dummy->Delete();
 
   this->Cells = NULL;
   this->Links = NULL;
@@ -91,19 +73,7 @@ vtkPolyData::~vtkPolyData()
 {
   this->Cleanup();
 
-  // Reference to static dummy persists.
-  // Keep destructed dummy from being used again.
-  DummyCritSect.Lock();
-  if (this->Dummy->GetReferenceCount() == 1)
-    {
-    this->Dummy->UnRegister(this);
-    this->Dummy = NULL;
-    }
-  else
-    {
-    this->Dummy->UnRegister(this);
-    }
-  DummyCritSect.Unlock();
+  this->Dummy->Delete();
 
   if (this->Vertex)
     {

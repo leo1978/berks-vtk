@@ -451,7 +451,7 @@ protected:
   vtkCellArray *Strips;
 
   // dummy static member below used as a trick to simplify traversal
-  static vtkCellArray *Dummy;
+  vtkCellArray *Dummy;
 
   // supporting structures for more complex topological operations
   // built only when necessary

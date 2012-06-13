@@ -18,13 +18,20 @@ option(VTK_DEBUG_LEAKS "Build leak checking support into VTK." OFF)
 option(VTK_ALL_NEW_OBJECT_FACTORY
   "Build all vtkObject derived classes with object factory new methods." OFF)
 
+option(VTK_USE_TBB "Use Intel Thread Building Blocks" OFF)
 mark_as_advanced(VTK_DEBUG_LEAKS VTK_USE_64BIT_IDS VTK_ALL_NEW_OBJECT_FACTORY)
 
 set(vtkCommonCore_EXPORT_OPTIONS
   VTK_DEBUG_LEAKS
   VTK_USE_64BIT_IDS
   VTK_ALL_NEW_OBJECT_FACTORY
+  VTK_USE_TBB
   )
+
+if(VTK_USE_TBB)
+  find_package(TBB REQUIRED)
+  include_directories(${TBB_INCLUDE_DIRS})
+endif()
 
 #-----------------------------------------------------------------------------
 
@@ -481,4 +488,8 @@ endif()
 vtk_module_library(vtkCommonCore ${Module_SRCS})
 
 target_link_libraries(vtkCommonCore ${CMAKE_THREAD_LIBS_INIT})
+if (VTK_USE_TBB)
+  target_link_libraries(vtkCommonCore ${TBB_LIBRARY})
+endif()
+
 set_target_properties(vtkCommonCore PROPERTIES LINK_INTERFACE_LIBRARIES "")

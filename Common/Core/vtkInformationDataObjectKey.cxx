@@ -62,9 +62,3 @@ void vtkInformationDataObjectKey::ShallowCopy(vtkInformation* from,
 {
   this->Set(to, this->Get(from));
 }
-
-//----------------------------------------------------------------------------
-void vtkInformationDataObjectKey::Report(vtkInformation* info,
-                                         vtkGarbageCollector* collector)
-{
-}

@@ -49,10 +49,6 @@ public:
   // object for this key, the value is removed from the second.
   virtual void ShallowCopy(vtkInformation* from, vtkInformation* to);
 
-  // Description:
-  // Report a reference this key has in the given information object.
-  virtual void Report(vtkInformation* info, vtkGarbageCollector* collector);
-
 protected:
   // The type required of all objects stored with this key.
   const char* RequiredClass;

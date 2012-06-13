@@ -50,10 +50,6 @@ public:
   // object for this key, the value is removed from the second.
   virtual void ShallowCopy(vtkInformation* from, vtkInformation* to);
 
-  // Description:
-  // Report a reference this key has in the given information object.
-  virtual void Report(vtkInformation* info, vtkGarbageCollector* collector);
-
 private:
   vtkInformationDataObjectKey(const vtkInformationDataObjectKey&);  // Not implemented.
   void operator=(const vtkInformationDataObjectKey&);  // Not implemented.

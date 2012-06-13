@@ -73,7 +73,11 @@ ostream& operator<<(ostream& os, vtkObjectBase& o)
 // to zero.
 vtkObjectBase::vtkObjectBase()
 {
+#ifdef VTK_USE_TBB
+  this->AtomicReferenceCount = 1;
+#else
   this->ReferenceCount = 1;
+#endif
   this->WeakPointers = 0;
 #ifdef VTK_DEBUG_LEAKS
   vtkDebugLeaks::ConstructingObject(this);
@@ -88,7 +92,11 @@ vtkObjectBase::~vtkObjectBase()
 
   // warn user if reference counting is on and the object is being referenced
   // by another object
+#ifdef VTK_USE_TBB
+  if ( this->AtomicReferenceCount > 0)
+#else
   if ( this->ReferenceCount > 0)
+#endif
     {
     vtkGenericWarningMacro(<< "Trying to delete object with non-zero reference count.");
     }
@@ -159,7 +167,11 @@ void vtkObjectBase::PrintHeader(ostream& os, vtkIndent indent)
 // its superclasses.
 void vtkObjectBase::PrintSelf(ostream& os, vtkIndent indent)
 {
+#ifdef VTK_USE_TBB
+  os << indent << "Reference Count: " << this->AtomicReferenceCount << "\n";
+#else
   os << indent << "Reference Count: " << this->ReferenceCount << "\n";
+#endif
 }
 
 void vtkObjectBase::PrintTrailer(ostream& os, vtkIndent indent)
@@ -171,7 +183,11 @@ void vtkObjectBase::PrintTrailer(ostream& os, vtkIndent indent)
 // Sets the reference count (use with care)
 void vtkObjectBase::SetReferenceCount(int ref)
 {
+#ifdef VTK_USE_TBB
+  this->AtomicReferenceCount = ref;
+#else
   this->ReferenceCount = ref;
+#endif
   vtkBaseDebugMacro(<< "Reference Count set to " << this->ReferenceCount);
 }
 
@@ -198,7 +214,11 @@ void vtkObjectBase::RegisterInternal(vtkObjectBase*, int check)
   if(!(check &&
        vtkObjectBaseToGarbageCollectorFriendship::TakeReference(this)))
     {
+#ifdef VTK_USE_TBB
+    this->AtomicReferenceCount.fetch_and_add(1);
+#else
     ++this->ReferenceCount;
+#endif
     }
 }
 
@@ -207,14 +227,24 @@ void vtkObjectBase::UnRegisterInternal(vtkObjectBase*, int check)
 {
   // If the garbage collector accepts a reference, do not decrement
   // the count.
-  if(check && this->ReferenceCount > 1 &&
+#ifdef VTK_USE_TBB
+  int refCount = this->AtomicReferenceCount;
+#else
+  int refCount = this->ReferenceCount;
+#endif
+  if(check && refCount > 1 &&
      vtkObjectBaseToGarbageCollectorFriendship::GiveReference(this))
     {
     return;
     }
 
   // Decrement the reference count, delete object if count goes to zero.
-  if(--this->ReferenceCount <= 0)
+#ifdef VTK_USE_TBB
+  int newRefCount = this->AtomicReferenceCount.fetch_and_add(-1) - 1;
+#else
+  int newRefCount = this->ReferenceCount--;
+#endif
+  if(newRefCount <= 0)
     {
     // Clear all weak pointers to the object before deleting it.
     if (this->WeakPointers)

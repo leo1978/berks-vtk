@@ -44,6 +44,10 @@
 #include "vtkIndent.h"
 #include "vtkSystemIncludes.h"
 
+#ifdef VTK_USE_TBB
+# include <tbb/atomic.h>
+#endif
+
 class vtkGarbageCollector;
 class vtkGarbageCollectorToObjectBaseFriendship;
 class vtkWeakPointerBase;
@@ -143,7 +147,13 @@ public:
   // Description:
   // Return the current reference count of this object.
   int  GetReferenceCount()
-    {return this->ReferenceCount;}
+  {
+#ifdef VTK_USE_TBB
+    return this->AtomicReferenceCount;
+#else
+    return this->ReferenceCount;
+#endif
+  }
 
   // Description:
   // Sets the reference count. (This is very dangerous, use with care.)
@@ -159,7 +169,6 @@ protected:
 
   virtual void CollectRevisions(ostream&) {} // Legacy; do not use!
 
-  int ReferenceCount;
   vtkWeakPointerBase **WeakPointers;
 
   // Internal Register/UnRegister implementation that accounts for
@@ -171,12 +180,20 @@ protected:
   // See vtkGarbageCollector.h:
   virtual void ReportReferences(vtkGarbageCollector*);
 
+#ifdef VTK_USE_TBB
+  tbb::atomic<int> AtomicReferenceCount;
+#else
+  int ReferenceCount;
+#endif
+
+
 private:
   //BTX
   friend VTKCOMMONCORE_EXPORT ostream& operator<<(ostream& os, vtkObjectBase& o);
   friend class vtkGarbageCollectorToObjectBaseFriendship;
   friend class vtkWeakPointerBaseToObjectBaseFriendship;
   //ETX
+
 protected:
 //BTX
   vtkObjectBase(const vtkObjectBase&) {}

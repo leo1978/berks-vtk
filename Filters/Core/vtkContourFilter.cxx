@@ -122,6 +122,7 @@ int vtkContourFilter::RequestUpdateExtent(vtkInformation* request,
                                           vtkInformationVector* outputVector)
 {
   vtkInformation* inInfo = inputVector[0]->GetInformationObject(0);
+  vtkInformation* outInfo = outputVector->GetInformationObject(0);
   vtkDataSet *input =
     vtkDataSet::SafeDownCast(inInfo->Get(vtkDataObject::DATA_OBJECT()));
 
@@ -144,7 +145,7 @@ int vtkContourFilter::RequestUpdateExtent(vtkInformation* request,
       !vtkUniformGrid::SafeDownCast(input))
     {
     int dim = 3;
-    int *uExt = inInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT());
+    int *uExt = outInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT());
     if (uExt[0] == uExt[1])
       {
       --dim;
@@ -187,7 +188,7 @@ int vtkContourFilter::RequestUpdateExtent(vtkInformation* request,
   // handle 3D RGrids
   if (vtkRectilinearGrid::SafeDownCast(input) && sType != VTK_BIT)
     {
-    int *uExt = inInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT());
+    int *uExt = outInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT());
     // if 3D
     if (uExt[0] < uExt[1] && uExt[2] < uExt[3] && uExt[4] < uExt[5])
       {
@@ -207,7 +208,7 @@ int vtkContourFilter::RequestUpdateExtent(vtkInformation* request,
   // handle 3D SGrids
   if (vtkStructuredGrid::SafeDownCast(input) && sType != VTK_BIT)
     {
-    int *uExt = inInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT());
+    int *uExt = outInfo->Get(vtkStreamingDemandDrivenPipeline::UPDATE_EXTENT());
     // if 3D
     if (uExt[0] < uExt[1] && uExt[2] < uExt[3] && uExt[4] < uExt[5])
       {

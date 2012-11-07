@@ -30,7 +30,7 @@ set(vtkCommonCore_EXPORT_OPTIONS
 
 if(VTK_USE_TBB)
   find_package(TBB REQUIRED)
-  include_directories(${TBB_INCLUDE_DIRS})
+  include_directories(${TBB_INCLUDE_DIR})
 endif()
 
 #-----------------------------------------------------------------------------

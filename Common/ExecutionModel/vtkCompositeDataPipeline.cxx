@@ -36,6 +36,7 @@ PURPOSE.  See the above copyright notice for more information.
 #include "vtkSmartPointer.h"
 #include "vtkStructuredGrid.h"
 #include "vtkUniformGrid.h"
+#include "assert.h"
 
 //----------------------------------------------------------------------------
 #if defined (JB_DEBUG1)
@@ -188,8 +189,6 @@ int vtkCompositeDataPipeline::ExecuteData(vtkInformation* request,
   int compositePort;
   bool composite = this->ShouldIterateOverInput(compositePort);
 
-  // This is stupid.
-  //compositePort = temporal ? -1 : compositePort;
   if ( composite)
     {
     if (this->GetNumberOfOutputPorts())
@@ -306,6 +305,42 @@ bool vtkCompositeDataPipeline::ShouldIterateOverInput(int& compositePort)
   return false;
 }
 
+
+void vtkCompositeDataPipeline::ExecuteEach(vtkCompositeDataIterator* iter,
+                                           vtkInformationVector** inInfoVec,
+                                           vtkInformationVector* outInfoVec,
+                                           int compositePort,
+                                           int connection,
+                                           vtkInformation* request,
+                                           vtkCompositeDataSet* compositeOutput)
+{
+  vtkInformation* inInfo  =inInfoVec[compositePort]->GetInformationObject(connection);
+  vtkInformation* outInfo = outInfoVec->GetInformationObject(0); //assumed to be 0
+
+  for (iter->InitTraversal(); !iter->IsDoneWithTraversal(); iter->GoToNextItem())
+    {
+    vtkDataObject* dobj = iter->GetCurrentDataObject();
+    if (dobj)
+      {
+      // Note that since VisitOnlyLeaves is ON on the iterator,
+      // this method is called only for leaves, hence, we are assured that
+      // neither dobj nor outObj are vtkCompositeDataSet subclasses.
+      vtkDataObject* outObj =
+        this->ExecuteSimpleAlgorithmForBlock(inInfoVec,
+                                             outInfoVec,
+                                             inInfo,
+                                             outInfo,
+                                             request,
+                                             dobj);
+      if (outObj)
+        {
+        compositeOutput->SetDataSet(iter, outObj);
+        outObj->FastDelete();
+        }
+      }
+    }
+}
+
 //----------------------------------------------------------------------------
 // Execute a simple (non-composite-aware) filter multiple times, once per
 // block. Collect the result in a composite dataset that is of the same
@@ -384,29 +419,7 @@ void vtkCompositeDataPipeline::ExecuteSimpleAlgorithm(
 
     vtkSmartPointer<vtkCompositeDataIterator> iter;
     iter.TakeReference(input->NewIterator());
-    for (iter->InitTraversal(); !iter->IsDoneWithTraversal();
-      iter->GoToNextItem())
-      {
-      vtkDataObject* dobj = iter->GetCurrentDataObject();
-      if (dobj)
-        {
-        // Note that since VisitOnlyLeaves is ON on the iterator,
-        // this method is called only for leaves, hence, we are assured that
-        // neither dobj nor outObj are vtkCompositeDataSet subclasses.
-        vtkDataObject* outObj =
-          this->ExecuteSimpleAlgorithmForBlock(inInfoVec,
-                                               outInfoVec,
-                                               inInfo,
-                                               outInfo,
-                                               r,
-                                               dobj);
-        if (outObj)
-          {
-          compositeOutput->SetDataSet(iter, outObj);
-          outObj->FastDelete();
-          }
-        }
-      }
+    this->ExecuteEach(iter, inInfoVec, outInfoVec, compositePort, 0, r,compositeOutput);
 
     // True when the pipeline is iterating over the current (simple)
     // filter to produce composite output. In this case,
@@ -418,8 +431,7 @@ void vtkCompositeDataPipeline::ExecuteSimpleAlgorithm(
     // piece requests properly).
     this->PopInformation(inInfo);
     r->Set(REQUEST_INFORMATION());
-    this->CopyDefaultInformation(r, vtkExecutive::RequestDownstream,
-                                 this->GetInputInformation(),
+    this->CopyDefaultInformation(r, vtkExecutive::RequestDownstream,  this->GetInputInformation(),
                                  this->GetOutputInformation());
 
     vtkDataObject* curInput = inInfo->Get(vtkDataObject::DATA_OBJECT());
@@ -455,13 +467,6 @@ vtkDataObject* vtkCompositeDataPipeline::ExecuteSimpleAlgorithmForBlock(
     return 0;
     }
 
-  double time = 0;
-  int hasTime = outInfo->Has(UPDATE_TIME_STEP());
-  if (hasTime)
-    {
-    time = outInfo->Get(UPDATE_TIME_STEP());
-    }
-
   // There must be a bug somehwere. If this Remove()
   // is not called, the following Set() has the effect
   // of removing (!) the key.
@@ -476,8 +481,7 @@ vtkDataObject* vtkCompositeDataPipeline::ExecuteSimpleAlgorithmForBlock(
 
   request->Set(REQUEST_DATA_OBJECT());
   this->SuppressResetPipelineInformation = 1;
-  this->Superclass::ExecuteDataObject(
-    request, this->GetInputInformation(),this->GetOutputInformation());
+  this->Superclass::ExecuteDataObject(request, inInfoVec,outInfoVec);
   this->SuppressResetPipelineInformation = 0;
   request->Remove(REQUEST_DATA_OBJECT());
 
@@ -497,7 +501,7 @@ vtkDataObject* vtkCompositeDataPipeline::ExecuteSimpleAlgorithmForBlock(
   int storedNumPieces = -1;
   for(int m=0; m < this->Algorithm->GetNumberOfOutputPorts(); ++m)
     {
-    vtkInformation* info = this->GetOutputInformation(m);
+    vtkInformation* info = outInfoVec->GetInformationObject(m);
     // Update the whole thing
     if (info->Has(
                   vtkStreamingDemandDrivenPipeline::WHOLE_EXTENT()))
@@ -526,12 +530,6 @@ vtkDataObject* vtkCompositeDataPipeline::ExecuteSimpleAlgorithmForBlock(
       }
     }
 
-  // if there was a time make sure that gets set in the RUE
-  if (hasTime)
-    {
-    outInfo->Set(UPDATE_TIME_STEP(),time);
-    }
-
   request->Set(REQUEST_UPDATE_EXTENT());
   this->CallAlgorithm(request, vtkExecutive::RequestUpstream,
                       inInfoVec, outInfoVec);
@@ -543,7 +541,7 @@ vtkDataObject* vtkCompositeDataPipeline::ExecuteSimpleAlgorithmForBlock(
 
   for(int m=0; m < this->Algorithm->GetNumberOfOutputPorts(); ++m)
     {
-    vtkInformation* info = this->GetOutputInformation(m);
+    vtkInformation* info = outInfoVec->GetInformationObject(m);
     if (storedPiece!=-1)
       {
       info->Set(
@@ -1067,4 +1065,3 @@ void vtkCompositeDataPipeline::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
 }
-

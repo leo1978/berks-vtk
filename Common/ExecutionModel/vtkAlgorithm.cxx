@@ -123,8 +123,8 @@ vtkAlgorithm::~vtkAlgorithm()
 // should range between (0,1).
 void vtkAlgorithm::UpdateProgress(double amount)
 {
-  this->Progress = amount;
-  this->InvokeEvent(vtkCommand::ProgressEvent,static_cast<void *>(&amount));
+  // this->Progress = amount;
+  // this->InvokeEvent(vtkCommand::ProgressEvent,static_cast<void *>(&amount));
 }
 
 

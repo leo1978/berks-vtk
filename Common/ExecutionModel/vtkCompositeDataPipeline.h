@@ -45,6 +45,7 @@
 #include "vtkStreamingDemandDrivenPipeline.h"
 
 class vtkCompositeDataSet;
+class vtkCompositeDataIterator;
 class vtkInformationDoubleKey;
 class vtkInformationIntegerVectorKey;
 class vtkInformationObjectBaseKey;
@@ -152,6 +153,15 @@ protected:
                                       vtkInformationVector** inInfoVec,
                                       vtkInformationVector* outInfoVec,
                                       int compositePort);
+
+  virtual void ExecuteEach(vtkCompositeDataIterator* iter,
+                           vtkInformationVector** inInfoVec,
+                           vtkInformationVector* outInfoVec,
+                           int compositePort,
+                           int connection,
+                           vtkInformation* request,
+                           vtkCompositeDataSet* compositeOutput);
+
   vtkDataObject* ExecuteSimpleAlgorithmForBlock(
     vtkInformationVector** inInfoVec,
     vtkInformationVector* outInfoVec,

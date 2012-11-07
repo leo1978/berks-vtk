@@ -33,7 +33,7 @@
 #include "vtkContourValues.h" // Passes calls through
 
 class vtkImageData;
-
+class vtkInformationIntegerVectorKey;
 class VTKFILTERSCORE_EXPORT vtkSynchronizedTemplates3D : public vtkPolyDataAlgorithm
 {
 public:
@@ -119,7 +119,7 @@ public:
 
   // Description:
   // Needed by templated functions.
-  int *GetExecuteExtent() {return this->ExecuteExtent;}
+//  int *GetExecuteExtent() {return this->ExecuteExtent;}
   void ThreadedExecute(vtkImageData *data, vtkInformation *inInfo,
                        vtkInformation *outInfo,
                        int *exExt, vtkDataArray *inScalars);
@@ -149,7 +149,7 @@ protected:
   virtual int RequestUpdateExtent(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
   virtual int FillInputPortInformation(int port, vtkInformation *info);
 
-  int ExecuteExtent[6];
+  static vtkInformationIntegerVectorKey* EXECUTE_EXTENT();
 
   int ArrayComponent;
 

@@ -10,7 +10,6 @@ set(Module_SRCS
   vtkStreamTracer.cxx
   vtkModifiedBSPTree.cxx
   vtkCellLocatorInterpolatedVelocityField.cxx
-  vtkTemporalStreamTracer.cxx
   vtkParticleTracerBase.cxx
   vtkParticleTracer.cxx
   vtkStreaklineFilter.cxx

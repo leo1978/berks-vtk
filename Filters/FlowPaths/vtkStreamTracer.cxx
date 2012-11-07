@@ -55,6 +55,7 @@ vtkCxxSetObjectMacro(vtkStreamTracer,InterpolatorPrototype,vtkAbstractInterpolat
 
 const double vtkStreamTracer::EPSILON = 1.0E-12;
 
+//----------------------------------------------------------------------------------------------
 namespace
 {
   // special function to interpolate the point data from the input to the output
@@ -91,6 +92,8 @@ namespace
 
 }
 
+//----------------------------------------------------------------------------------------------
+
 vtkStreamTracer::vtkStreamTracer()
 {
   this->Integrator = vtkRungeKutta2::New();
@@ -113,8 +116,6 @@ vtkStreamTracer::vtkStreamTracer()
   this->ComputeVorticity = true;
   this->RotationScale    = 1.0;
 
-  this->LastUsedStepSize = 0.0;
-
   this->GenerateNormalsInIntegrate = true;
 
   this->InterpolatorPrototype = 0;
@@ -125,7 +126,6 @@ vtkStreamTracer::vtkStreamTracer()
   this->SetInputArrayToProcess(0,0,0,vtkDataObject::FIELD_ASSOCIATION_POINTS,
                                vtkDataSetAttributes::VECTORS);
 
-  this->HasMatchingPointAttributes = true;
 }
 
 vtkStreamTracer::~vtkStreamTracer()
@@ -403,8 +403,8 @@ void vtkStreamTracer::InitializeSeeds(vtkDataArray*& seeds,
     }
 }
 
-int vtkStreamTracer::SetupOutput(vtkInformation* inInfo,
-                                 vtkInformation* outInfo)
+vtkSmartPointer<vtkCompositeDataSet> vtkStreamTracer::SetupOutput(vtkInformation* inInfo,
+                                                                  vtkInformation* outInfo)
 {
   int piece=outInfo->Get(
     vtkStreamingDemandDrivenPipeline::UPDATE_PIECE_NUMBER());
@@ -413,13 +413,11 @@ int vtkStreamTracer::SetupOutput(vtkInformation* inInfo,
 
   vtkDataObject* input = inInfo->Get(vtkDataObject::DATA_OBJECT());
 
-  vtkCompositeDataSet *hdInput = vtkCompositeDataSet::SafeDownCast(input);
-  vtkDataSet* dsInput = vtkDataSet::SafeDownCast(input);
+  vtkSmartPointer<vtkCompositeDataSet> hdInput = vtkCompositeDataSet::SafeDownCast(input);
+  vtkSmartPointer<vtkDataSet> dsInput = vtkDataSet::SafeDownCast(input);
   if (hdInput)
     {
-    this->InputData = hdInput;
-    hdInput->Register(this);
-    return 1;
+    return hdInput;
     }
   else if (dsInput)
     {
@@ -429,16 +427,15 @@ int vtkStreamTracer::SetupOutput(vtkInformation* inInfo,
     mb->SetNumberOfBlocks(numPieces);
     mb->SetBlock(piece, copy);
     copy->Delete();
-    this->InputData = mb;
-    mb->Register(this);
+    vtkSmartPointer<vtkCompositeDataSet> input = mb;
     mb->Delete();
-    return 1;
+    return input;
     }
   else
     {
     vtkErrorMacro("This filter cannot handle input of type: "
                   << (input?input->GetClassName():"(none)"));
-    return 0;
+    return NULL;
     }
 
 }
@@ -451,10 +448,12 @@ int vtkStreamTracer::RequestData(
   vtkInformation *inInfo = inputVector[0]->GetInformationObject(0);
   vtkInformation *outInfo = outputVector->GetInformationObject(0);
 
-  if (!this->SetupOutput(inInfo, outInfo))
+  vtkSmartPointer<vtkCompositeDataSet> input = this->SetupOutput(inInfo, outInfo);
+  if (input==NULL)
     {
     return 0;
     }
+
 
   vtkInformation *sourceInfo = inputVector[1]->GetInformationObject(0);
   vtkDataSet *source = 0;
@@ -471,12 +470,14 @@ int vtkStreamTracer::RequestData(
   vtkIntArray* integrationDirections = 0;
   this->InitializeSeeds(seeds, seedIds, integrationDirections, source);
 
+  bool hasMatchingPointAttributes(true);
+
   if (seeds)
     {
     double lastPoint[3];
     vtkAbstractInterpolatedVelocityField* func = 0;
     int maxCellSize = 0;
-    if (this->CheckInputs(func, &maxCellSize) != VTK_OK)
+    if (this->CheckInputs(input,func,hasMatchingPointAttributes, &maxCellSize) != VTK_OK)
       {
       vtkDebugMacro("No appropriate inputs have been found. Can not execute.");
       if(func)
@@ -486,17 +487,16 @@ int vtkStreamTracer::RequestData(
       seeds->Delete();
       integrationDirections->Delete();
       seedIds->Delete();
-      this->InputData->UnRegister(this);
       return 1;
       }
 
-    if(vtkOverlappingAMR::SafeDownCast(this->InputData))
+    if(vtkOverlappingAMR::SafeDownCast(input))
       {
-      vtkOverlappingAMR* amr =vtkOverlappingAMR::SafeDownCast(this->InputData);
+      vtkOverlappingAMR* amr =vtkOverlappingAMR::SafeDownCast(input);
       amr->GenerateParentChildInformation();
       }
 
-    vtkCompositeDataIterator* iter = this->InputData->NewIterator();
+    vtkCompositeDataIterator* iter = input->NewIterator();
     vtkSmartPointer<vtkCompositeDataIterator> iterP(iter);
     iter->Delete();
 
@@ -514,7 +514,9 @@ int vtkStreamTracer::RequestData(
       const char *vecName = vectors->GetName();
       double propagation = 0;
       vtkIdType numSteps = 0;
-      this->Integrate(input0->GetPointData(), output,
+      this->Integrate(input0->GetPointData(),
+                      hasMatchingPointAttributes,
+                      output,
                       seeds, seedIds,
                       integrationDirections,
                       lastPoint, func,
@@ -528,22 +530,23 @@ int vtkStreamTracer::RequestData(
   integrationDirections->Delete();
   seedIds->Delete();
 
-  this->InputData->UnRegister(this);
   return 1;
 }
 
-int vtkStreamTracer::CheckInputs(vtkAbstractInterpolatedVelocityField*& func,
-                                   int* maxCellSize)
+int vtkStreamTracer::CheckInputs(vtkCompositeDataSet* input,
+                                 vtkAbstractInterpolatedVelocityField*& func,
+                                 bool& hasMatchingPointAttributes,
+                                 int* maxCellSize)
 {
-  if (!this->InputData)
+  if (!input)
     {
     return VTK_ERROR;
     }
 
-  vtkOverlappingAMR* amrData = vtkOverlappingAMR::SafeDownCast(this->InputData);
+  vtkOverlappingAMR* amrData = vtkOverlappingAMR::SafeDownCast(input);
 
   vtkSmartPointer<vtkCompositeDataIterator> iter;
-  iter.TakeReference(this->InputData->NewIterator());
+  iter.TakeReference(input->NewIterator());
 
   vtkDataSet* input0 =NULL;
   iter->GoToFirstItem();
@@ -632,21 +635,21 @@ int vtkStreamTracer::CheckInputs(vtkAbstractInterpolatedVelocityField*& func,
   //Check if the data attributes match, warn if not
   vtkPointData* pd0 = input0->GetPointData();
   int numPdArrays = pd0->GetNumberOfArrays();
-  this->HasMatchingPointAttributes = true;
+  hasMatchingPointAttributes = true;
   for(iter->GoToFirstItem();!iter->IsDoneWithTraversal(); iter->GoToNextItem())
     {
     vtkDataSet* data = vtkDataSet::SafeDownCast(iter->GetCurrentDataObject());
     vtkPointData* pd = data->GetPointData();
     if(pd->GetNumberOfArrays()!=numPdArrays)
       {
-      this->HasMatchingPointAttributes = false;
+      hasMatchingPointAttributes = false;
       }
     for(int i=0; i<numPdArrays; i++)
       {
       if( !pd->GetArray(pd0->GetArrayName(i))
         ||!pd0->GetArray(pd->GetArrayName(i)))
         {
-        this->HasMatchingPointAttributes = false;
+        hasMatchingPointAttributes = false;
         }
       }
     }
@@ -654,6 +657,7 @@ int vtkStreamTracer::CheckInputs(vtkAbstractInterpolatedVelocityField*& func,
 }
 
 void vtkStreamTracer::Integrate(vtkPointData *input0Data,
+                                bool hasMatchingPointAttributes,
                                 vtkPolyData* output,
                                 vtkDataArray* seedSource,
                                 vtkIdList* seedIds,
@@ -842,7 +846,7 @@ void vtkStreamTracer::Integrate(vtkPointData *input0Data,
 
     // Interpolate all point attributes on first point
     func->GetLastWeights(weights);
-    InterpolatePoint(outputPD, inputPD, nextPoint, cell->PointIds, weights, this->HasMatchingPointAttributes);
+    InterpolatePoint(outputPD, inputPD, nextPoint, cell->PointIds, weights, hasMatchingPointAttributes);
     if(vecType != vtkDataObject::POINT)
       {
       velocityVectors->InsertNextTuple(velocity);
@@ -931,7 +935,6 @@ void vtkStreamTracer::Integrate(vtkPointData *input0Data,
           }
         maxStep = stepSize.Interval;
         }
-      this->LastUsedStepSize = stepSize.Interval;
 
       // Calculate the next step using the integrator provided
       // Break if the next point is out of bounds.
@@ -997,7 +1000,7 @@ void vtkStreamTracer::Integrate(vtkPointData *input0Data,
       speed = vtkMath::Norm(velocity);
       // Interpolate all point attributes on current point
       func->GetLastWeights(weights);
-      InterpolatePoint(outputPD, inputPD, nextPoint, cell->PointIds, weights, this->HasMatchingPointAttributes);
+      InterpolatePoint(outputPD, inputPD, nextPoint, cell->PointIds, weights, hasMatchingPointAttributes);
       if(vecType != vtkDataObject::POINT)
         {
         velocityVectors->InsertNextTuple(velocity);
@@ -1363,7 +1366,7 @@ void vtkStreamTracer::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "Rotation scale: " << this->RotationScale << endl;
 }
 
-vtkExecutive* vtkStreamTracer::CreateDefaultExecutive()
-{
-  return vtkCompositeDataPipeline::New();
-}
+// vtkExecutive* vtkStreamTracer::CreateDefaultExecutive()
+// {
+//   return Superclass::New();
+// }

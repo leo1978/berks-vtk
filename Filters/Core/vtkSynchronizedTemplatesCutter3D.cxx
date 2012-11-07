@@ -551,7 +551,9 @@ int vtkSynchronizedTemplatesCutter3D::RequestData(
   this->RequestUpdateExtent(request,inputVector,outputVector);
 
   // Just call the threaded execute directly.
-  this->ThreadedExecute(input, outInfo, this->ExecuteExtent, 0);
+  int* executeExtent = outInfo->Get(EXECUTE_EXTENT());
+
+  this->ThreadedExecute(input, outInfo, executeExtent, 0);
 
   output->Squeeze();
 

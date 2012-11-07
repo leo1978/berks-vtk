@@ -89,6 +89,11 @@ if (CMAKE_CROSSCOMPILING AND NOT COMPILE_TOOLS_IMPORTED)
   set (COMPILE_TOOLS_IMPORTED TRUE)
 endif()
 
+if(VTK_USE_TBB)
+  find_package(TBB REQUIRED)
+  include_directories(${TBB_INCLUDE_DIR})
+endif()
+
 # FIXME: These will be removed, used by vtkzlib etc
 set(VTK_INSTALL_BIN_DIR_CM24 ${VTK_INSTALL_RUNTIME_DIR})
 set(VTK_INSTALL_LIB_DIR_CM24 ${VTK_INSTALL_LIBRARY_DIR})

@@ -1,3 +1,6 @@
+find_package(TBB REQUIRED)
+set(vtkCommonExecutionModel_SYSTEM_INCLUDE_DIRS ${TBB_INCLUDE_DIRS})
+
 SET(Module_SRCS
   vtkAlgorithm.cxx
   vtkAlgorithmOutput.cxx
@@ -47,6 +50,7 @@ SET(Module_SRCS
   vtkTableExtentTranslator.cxx
   vtkThreadedImageAlgorithm.cxx
   vtkThreadedStreamingPipeline.cxx
+  vtkThreadedCompositeDataPipeline.cxx
   vtkTreeAlgorithm.cxx
   vtkTrivialProducer.cxx
   vtkUndirectedGraphAlgorithm.cxx
@@ -82,3 +86,4 @@ set_source_files_properties(
   )
 
 vtk_module_library(vtkCommonExecutionModel ${Module_SRCS})
+target_link_libraries(vtkCommonExecutionModel ${TBB_LIBRARY})

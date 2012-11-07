@@ -81,6 +81,7 @@
 #include "vtkPolyDataAlgorithm.h"
 
 #include "vtkInitialValueProblemSolver.h" // Needed for constants
+#include "vtkSmartPointer.h" //for parameters
 
 class vtkCompositeDataSet;
 class vtkDataArray;
@@ -302,8 +303,8 @@ protected:
   vtkStreamTracer();
   ~vtkStreamTracer();
 
-  // Create a default executive.
-  virtual vtkExecutive* CreateDefaultExecutive();
+  /* // Create a default executive. */
+  /* virtual vtkExecutive* CreateDefaultExecutive(); */
 
   // hide the superclass' AddInput() from the user and the compiler
   void AddInput(vtkDataObject *)
@@ -315,6 +316,7 @@ protected:
   void CalculateVorticity( vtkGenericCell* cell, double pcoords[3],
                            vtkDoubleArray* cellVectors, double vorticity[3] );
   void Integrate(vtkPointData *inputData,
+                 bool hasMatchingPointAttributes,
                  vtkPolyData* output,
                  vtkDataArray* seedSource,
                  vtkIdList* seedIds,
@@ -330,7 +332,7 @@ protected:
                        double lastPoint[3],
                        double stepSize,
                        vtkAbstractInterpolatedVelocityField* func);
-  int CheckInputs(vtkAbstractInterpolatedVelocityField*& func,
+  int CheckInputs(vtkCompositeDataSet* input,vtkAbstractInterpolatedVelocityField*& func, bool& hasMatchingPointAttributes,
                   int* maxCellSize);
   void GenerateNormals(vtkPolyData* output, double* firstNormal, const char *vecName);
 
@@ -341,8 +343,6 @@ protected:
 
   static const double EPSILON;
   double TerminalSpeed;
-
-  double LastUsedStepSize;
 
 //BTX
   struct IntervalInformation
@@ -363,8 +363,8 @@ protected:
 
 //ETX
 
-  int SetupOutput(vtkInformation* inInfo,
-                  vtkInformation* outInfo);
+  vtkSmartPointer<vtkCompositeDataSet> SetupOutput(vtkInformation* inInfo,
+                                                   vtkInformation* outInfo);
   void InitializeSeeds(vtkDataArray*& seeds,
                        vtkIdList*& seedIds,
                        vtkIntArray*& integrationDirections,
@@ -383,9 +383,6 @@ protected:
   double RotationScale;
 
   vtkAbstractInterpolatedVelocityField * InterpolatorPrototype;
-
-  vtkCompositeDataSet* InputData;
-  bool HasMatchingPointAttributes; //does the point data in the multiblocks have the same attributes?
 
   friend class PStreamTracerUtils;
 

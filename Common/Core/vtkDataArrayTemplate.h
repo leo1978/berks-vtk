@@ -63,6 +63,12 @@ public:
   // Note that memory allocation is performed as necessary to hold the data.
   virtual void InsertTuple(vtkIdType i, vtkIdType j, vtkAbstractArray* source);
 
+
+  // Description:
+  // Insert the jth tuple in the source array, at ith location in this array.
+  // Note that memory allocation is performed as necessary to hold the data.
+  virtual void InsertTupleFast(vtkIdType i, vtkIdType j, int size,vtkAbstractArray* source);
+
   // Description:
   // Insert the jth tuple in the source array, at the end in this array.
   // Note that memory allocation is performed as necessary to hold the data.

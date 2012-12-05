@@ -145,6 +145,7 @@ public:
     return this->Data->InsertNextTuple(x);};
   vtkIdType InsertNextPoint(const double x[3]) {
     return this->Data->InsertNextTuple(x);};
+  void AppendPoints(vtkPoints* from, vtkIdType begin, vtkIdType size);
   vtkIdType InsertNextPoint(double x, double y, double z);
 
   // Description:

@@ -710,6 +710,16 @@ void vtkDataSetAttributes::CopyData(vtkDataSetAttributes* fromPd,
     }
 }
 
+
+//--------------------------------------------------------------------------
+// Copy the attribute data from one id to another. Make sure CopyAllocate() has
+// been invoked before using this method.
+void vtkDataSetAttributes::CopyData(vtkDataSetAttributes* fromPd, int i,
+                                    vtkIdType fromId, vtkIdType toId, int size)
+{
+  this->Data[this->TargetIndices[i]]->InsertTupleFast(toId, fromId, size,fromPd->Data[i]);
+}
+
 //--------------------------------------------------------------------------
 void vtkDataSetAttributes::CopyAllocate(vtkDataSetAttributes* pd,
                                         vtkIdType sze, vtkIdType ext,

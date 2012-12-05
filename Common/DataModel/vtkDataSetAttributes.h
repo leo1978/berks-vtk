@@ -451,6 +451,17 @@ public:
   // CopyAllOn/Off
   void CopyData(vtkDataSetAttributes *fromPd, vtkIdType fromId, vtkIdType toId);
 
+  // Description:
+  // Copy the attribute data from one id to another. Make sure CopyAllocate()
+  // has been invoked before using this method. When copying a field,
+  // the following copying rules are
+  // followed: 1) Check if a field is an attribute, if yes and if there
+  // is a COPYTUPLE copy flag for that attribute (on or off), obey the  flag
+  // for that attribute, ignore (2) and (3), 2) if there is a copy field for
+  // that field (on or off), obey the flag, ignore (3) 3) obey
+  // CopyAllOn/Off
+  void CopyData(vtkDataSetAttributes *fromPd, int i,vtkIdType fromId, vtkIdType toId, int size=1);
+
 
   // Description:
   // Copy a tuple of data from one data array to another. This method
@@ -553,6 +564,8 @@ public:
     vtkIdList *ids, double *weights);
 
   friend class vtkDataSetAttributes::FieldList;
+
+  vtkFieldData::BasicIterator GetRequiredArrays(){ return this->RequiredArrays;}
 //ETX
 
 //BTX

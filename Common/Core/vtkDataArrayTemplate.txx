@@ -486,6 +486,39 @@ void vtkDataArrayTemplate<T>::InsertTuple(vtkIdType i, vtkIdType j,
   this->DataChanged();
 }
 
+
+
+//----------------------------------------------------------------------------
+// Insert the jth tuple in the source array, at ith location in this array.
+// Note that memory allocation is performed as necessary to hold the data.
+template<class T>
+void vtkDataArrayTemplate<T>::InsertTupleFast(vtkIdType i, vtkIdType j, int size,
+  vtkAbstractArray* source)
+{
+  int n = this->NumberOfComponents*size;
+  vtkIdType locOut = i * this->NumberOfComponents;
+  vtkIdType maxSize = locOut + n;
+  if (maxSize > this->Size)
+    {
+    if (this->ResizeAndExtend(maxSize)==0)
+      {
+      return;
+      }
+    }
+  vtkIdType locIn = j * this->NumberOfComponents;
+  T* outPtr = this->GetPointer(locOut);
+  T* inPtr = static_cast<T*>(source->GetVoidPointer(locIn));
+
+  size_t s=static_cast<size_t>(n);
+  memcpy(outPtr, inPtr, s*sizeof(T));
+
+  vtkIdType maxId = maxSize-1;
+  if ( maxId > this->MaxId )
+    {
+    this->MaxId = maxId;
+    }
+}
+
 //----------------------------------------------------------------------------
 // Insert the jth tuple in the source array, at the end in this array.
 // Note that memory allocation is performed as necessary to hold the data.

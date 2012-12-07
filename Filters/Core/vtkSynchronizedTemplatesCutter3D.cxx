@@ -45,6 +45,20 @@
 vtkStandardNewMacro(vtkSynchronizedTemplatesCutter3D);
 vtkCxxSetObjectMacro(vtkSynchronizedTemplatesCutter3D,CutFunction,vtkImplicitFunction);
 
+namespace
+{
+inline void ComputeImageBounds(double* origin,double* spacing, int* extent, double bb[6])
+{
+  bb[0] = origin[0] + (extent[0] * spacing[0]);
+  bb[2] = origin[1] + (extent[2] * spacing[1]);
+  bb[4] = origin[2] + (extent[4] * spacing[2]);
+
+  bb[1] = origin[0] + (extent[1] * spacing[0]);
+  bb[3] = origin[1] + (extent[3] * spacing[1]);
+  bb[5] = origin[2] + (extent[5] * spacing[2]);
+}
+};
+
 //----------------------------------------------------------------------------
 // Description:
 // Construct object with initial scalar range (0,1) and single contour value
@@ -231,8 +245,8 @@ void ContourImage(vtkSynchronizedTemplatesCutter3D *self, int *exExt,
     //==================================================================
     for (k = zMin; k <= zMax; k++)
       {
-      self->UpdateProgress((double)vidx/numContours +
-                           (k-zMin)/((zMax - zMin+1.0)*numContours));
+      // self->UpdateProgress((double)vidx/numContours +
+      //                      (k-zMin)/((zMax - zMin+1.0)*numContours));
       inPtrY = inPtrZ;
 
       // for each slice compute the scalars
@@ -553,12 +567,19 @@ int vtkSynchronizedTemplatesCutter3D::RequestData(
     outInfo->Get(vtkDataObject::DATA_OBJECT()));
 
   // to be safe recompute the
-  this->RequestUpdateExtent(request,inputVector,outputVector);
+  if(0) //disabling this to get experimental multithreading code to work
+    {
+    this->RequestUpdateExtent(request,inputVector,outputVector);
+    }
 
   // Just call the threaded execute directly.
-  int* executeExtent = outInfo->Get(EXECUTE_EXTENT());
+  int* executeExtent = inInfo->Get(EXECUTE_EXTENT());
 
   this->ThreadedExecute(input, outInfo, executeExtent, 0);
+
+  double bb[6];
+  ComputeImageBounds(input->GetOrigin(), input->GetSpacing(), executeExtent,bb);
+  outInfo->Set(BOUNDING_BOX(),bb,6);
 
   output->Squeeze();
 

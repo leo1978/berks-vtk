@@ -136,7 +136,18 @@ public:
   vtkSetMacro(ArrayComponent, int);
   vtkGetMacro(ArrayComponent, int);
 
-protected:
+  static vtkInformationDoubleVectorKey* BOUNDING_BOX();
+  static vtkInformationIntegerVectorKey* EXECUTE_EXTENT();
+
+  // Description:
+  // see vtkAlgorithm for details
+  virtual int ProcessRequest(vtkInformation*,
+                             vtkInformationVector**,
+                             vtkInformationVector*);
+
+  virtual int GetParallelInputPort() const { return 0;}
+
+ protected:
   vtkSynchronizedTemplates3D();
   ~vtkSynchronizedTemplates3D();
 
@@ -149,15 +160,14 @@ protected:
   virtual int RequestUpdateExtent(vtkInformation *, vtkInformationVector **, vtkInformationVector *);
   virtual int FillInputPortInformation(int port, vtkInformation *info);
 
-  static vtkInformationIntegerVectorKey* EXECUTE_EXTENT();
-
   int ArrayComponent;
 
-private:
+  static int ParallelOutputPort;
+
+ private:
   vtkSynchronizedTemplates3D(const vtkSynchronizedTemplates3D&);  // Not implemented.
   void operator=(const vtkSynchronizedTemplates3D&);  // Not implemented.
 };
-
 
 // template table.
 //BTX

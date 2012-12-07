@@ -25,7 +25,9 @@
 #include "vtkInformationExecutivePortVectorKey.h"
 #include "vtkInformationIntegerKey.h"
 #include "vtkInformationObjectBaseKey.h"
+#include "vtkInformationRequestKey.h"
 #include "vtkInformationVector.h"
+
 #include "vtkMultiThreader.h"
 #include "vtkCompositeDataIterator.h"
 #include "vtkCompositeDataSet.h"
@@ -35,6 +37,7 @@
 #include "vtkParallelFor.h"
 #include "vtkObjectFactory.h"
 #include "vtkDebugLeaks.h"
+#include "vtkImageData.h"
 
 #include <tbb/tbb.h>
 #include <tbb/parallel_for.h>
@@ -45,29 +48,32 @@
 
 bool vtkThreadedCompositeDataPipeline::UseTBB  = true;
 
+int vtkThreadedCompositeDataPipeline::NumChunks  = 4;
+
 //----------------------------------------------------------------------------
 vtkStandardNewMacro(vtkThreadedCompositeDataPipeline);
+vtkInformationKeyMacro(vtkThreadedCompositeDataPipeline, REQUEST_DIVIDE, Request);
+vtkInformationKeyMacro(vtkThreadedCompositeDataPipeline, REQUEST_MERGE, Request);
 
 //----------------------------------------------------------------------------
-inline bool Find(vtkInformation* info, vtkInformationVector** infoVec, int n)
-{
-  for(int i=0; i<n; i++)
-    {
-    vtkInformationVector* infoVec_i = infoVec[i];
-    for(int j=0; j<infoVec_i->GetNumberOfInformationObjects(); j++)
-      {
-      if(infoVec_i->GetInformationObject(j)==info)
-        {
-        return true;
-        }
-      }
-    }
-  return false;
-}
-
-
 namespace
 {
+  inline bool Find(vtkInformation* info, vtkInformationVector** infoVec, int n)
+  {
+    for(int i=0; i<n; i++)
+      {
+      vtkInformationVector* infoVec_i = infoVec[i];
+      for(int j=0; j<infoVec_i->GetNumberOfInformationObjects(); j++)
+        {
+        if(infoVec_i->GetInformationObject(j)==info)
+          {
+          return true;
+          }
+        }
+      }
+    return false;
+  }
+
   static vtkInformationVector** Clone(vtkInformationVector** src, int n)
   {
     vtkInformationVector** dst = new vtkInformationVector*[n];
@@ -206,13 +212,13 @@ public:
   }
 
 protected:
+  vtkThreadedCompositeDataPipeline* Exec;
   vtkInformationVector** InInfoVec;
   vtkInformationVector* OutInfoVec;
   vtkSmartPointer<ProcessBlockData> InfoPrototype;
   int CompositePort;
   int Connection;
   vtkInformation* Request;
-  vtkThreadedCompositeDataPipeline* Exec;
   const std::vector<vtkDataObject*>& InObjs;
   vtkDataObject** OutObjs;
 };
@@ -257,7 +263,11 @@ void vtkThreadedCompositeDataPipeline::ExecuteEach(vtkCompositeDataIterator* ite
   vtkInformation* inInfo  =inInfoVec[compositePort]->GetInformationObject(connection);
 
   assert(Find(inInfo,inInfoVec, this->GetNumberOfInputPorts()));
-  std::vector<vtkDataObject*> inObjs, outObjs;
+
+  // from input data objects  itr -> (inObjs, indices)
+  // inObjs are the non-null objects that we will loop over.
+  // indices map the input objects to inObjs
+  std::vector<vtkDataObject*> inObjs;
   std::vector<int> indices;
   for (iter->InitTraversal(); !iter->IsDoneWithTraversal(); iter->GoToNextItem())
     {
@@ -272,8 +282,12 @@ void vtkThreadedCompositeDataPipeline::ExecuteEach(vtkCompositeDataIterator* ite
       indices.push_back(-1);
       }
     }
+
+  // instantiate outObjs, the output objects that will be created from inObjs
+  std::vector<vtkDataObject*> outObjs;
   outObjs.resize(indices.size(),NULL);
 
+  // create the parallel task processBlock
   ProcessBlock processBlock(this,
                             inInfoVec,
                             outInfoVec,
@@ -284,6 +298,7 @@ void vtkThreadedCompositeDataPipeline::ExecuteEach(vtkCompositeDataIterator* ite
 
   tbb::blocked_range<size_t> range(0,inObjs.size());
 
+  //run the parallel tasks and copy the output from outObjs -> compositeDataSet
   if(this->UseTBB)
     {
     int numThreads =vtkMultiThreader::GetGlobalDefaultNumberOfThreads();

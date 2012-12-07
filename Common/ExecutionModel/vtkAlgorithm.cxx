@@ -121,10 +121,11 @@ vtkAlgorithm::~vtkAlgorithm()
 // Update the progress of the process object. If a ProgressMethod exists,
 // executes it. Then set the Progress ivar to amount. The parameter amount
 // should range between (0,1).
+// WARNING: not thread safe
 void vtkAlgorithm::UpdateProgress(double amount)
 {
-  // this->Progress = amount;
-  // this->InvokeEvent(vtkCommand::ProgressEvent,static_cast<void *>(&amount));
+  this->Progress = amount;
+  this->InvokeEvent(vtkCommand::ProgressEvent,static_cast<void *>(&amount));
 }
 
 

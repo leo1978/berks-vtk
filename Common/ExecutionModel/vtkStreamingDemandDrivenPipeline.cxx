@@ -35,6 +35,7 @@
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
 #include "vtkSmartPointer.h"
+#include "assert.h"
 
 vtkStandardNewMacro(vtkStreamingDemandDrivenPipeline);
 
@@ -743,7 +744,7 @@ vtkStreamingDemandDrivenPipeline
               int piece = outInfo->Get(UPDATE_PIECE_NUMBER());
               int numPieces = outInfo->Get(UPDATE_NUMBER_OF_PIECES());
               int ghostLevel = outInfo->Get(UPDATE_NUMBER_OF_GHOST_LEVELS());
-              if (piece >= 0)
+              if (piece >= 0 && numPieces!=1)
                 {
                 this->SetUpdateExtent(inInfo, piece, numPieces, ghostLevel);
                 }
@@ -1238,7 +1239,10 @@ vtkStreamingDemandDrivenPipeline
     }
   else
     {
-    this->ContinueExecuting = 0;
+    if(this->ContinueExecuting)
+      {
+      this->ContinueExecuting = 0;
+      }
     this->Superclass::ExecuteDataEnd(request,inInfoVec,outInfoVec);
     }
 }

@@ -31,10 +31,12 @@
 class vtkComputingResources;
 class vtkExecutionScheduler;
 class vtkExecutiveCollection;
+class vtkInformationVector;
+class vtkInformation;
 
 class VTKCOMMONEXECUTIONMODEL_EXPORT vtkThreadedCompositeDataPipeline : public vtkCompositeDataPipeline
 {
-public:
+ public:
   static vtkThreadedCompositeDataPipeline* New();
   vtkTypeMacro(vtkThreadedCompositeDataPipeline,vtkCompositeDataPipeline);
 
@@ -43,6 +45,15 @@ public:
   // Description
   // Turn on/off using TBB. For debugging and testing only
   static bool UseTBB;
+
+  // Description
+  // The number of chunks that the pipeline thinks is appropiate
+  static int NumChunks;
+
+  // Description:
+  // Key defining a request to make sure the output information is up to date.
+  static vtkInformationRequestKey* REQUEST_DIVIDE();
+  static vtkInformationRequestKey* REQUEST_MERGE();
 
  protected:
   vtkThreadedCompositeDataPipeline();
@@ -54,7 +65,8 @@ public:
                            int connection,
                            vtkInformation* request,
                            vtkCompositeDataSet* compositeOutput);
-private:
+
+ private:
   vtkThreadedCompositeDataPipeline(const vtkThreadedCompositeDataPipeline&);  // Not implemented.
   void operator=(const vtkThreadedCompositeDataPipeline&);  // Not implemented.
   friend class ProcessBlock;

@@ -22,9 +22,11 @@
 #include "vtkFloatArray.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
+#include "vtkInformationDoubleVectorKey.h"
 #include "vtkIntArray.h"
 #include "vtkLongArray.h"
 #include "vtkMath.h"
+#include "vtkNew.h"
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
 #include "vtkPolyData.h"
@@ -36,11 +38,286 @@
 #include "vtkUnsignedLongArray.h"
 #include "vtkUnsignedShortArray.h"
 #include "vtkInformationIntegerVectorKey.h"
+#include "vtkThreadedCompositeDataPipeline.h"
 
 #include <math.h>
 
+//for CleanMerge(). move me
+#include "vtkCellArray.h"
+#include "vtkCellData.h"
+#include "vtkBoundingBox.h"
+#include "vtkMergePoints.h"
+#include "vtkSmartPointer.h"
+
 vtkStandardNewMacro(vtkSynchronizedTemplates3D);
 vtkInformationKeyRestrictedMacro(vtkSynchronizedTemplates3D, EXECUTE_EXTENT, IntegerVector, 6);
+vtkInformationKeyRestrictedMacro(vtkSynchronizedTemplates3D, BOUNDING_BOX, DoubleVector, 6);
+
+int vtkSynchronizedTemplates3D::ParallelOutputPort=0;
+
+//----------------------------------------------------------------------------
+namespace
+{
+  inline bool EmptyExtent(int* ext)
+  {
+    if(!ext)
+      {
+      return true;
+      }
+    if(ext[1]<ext[0] || ext[3]<ext[2] || ext[5]<ext[4])
+      {
+      return true;
+      }
+    return false;
+  }
+
+  void DuplicateDataObject(vtkInformation* info, int n, vtkInformationVector* infos)
+  {
+    vtkDataObject* data = info->Get(vtkDataObject::DATA_OBJECT());
+
+    infos->SetNumberOfInformationObjects(n);
+    for(int i=0; i<n; i++)
+      {
+      //Allocate a new information object
+      vtkNew<vtkInformation> info_i;
+      info_i->Copy(info,1);
+      infos->SetInformationObject(i, info_i.GetPointer());
+
+      //Fill it out
+      vtkDataObject* data_i = data->NewInstance();
+      data_i->ShallowCopy(data);
+      info_i->Set(vtkDataObject::DATA_OBJECT(), data_i);
+      data_i->FastDelete();
+      }
+  }
+
+  void SplitImage(vtkInformation* in, int n, vtkInformationVector* infos)
+  {
+    DuplicateDataObject(in, n, infos);
+
+    int* wholeExtent = in->Get(vtkStreamingDemandDrivenPipeline::WHOLE_EXTENT()); //XXX check that I should use this
+    assert(wholeExtent);
+    vtkNew<vtkExtentTranslator> translator;
+    for(int i=0; i<n; i++)
+      {
+      int ext[6];
+      translator->PieceToExtentThreadSafe(i, n, 0, wholeExtent, ext, translator->GetSplitMode(),0);
+      infos->GetInformationObject(i)->Set(vtkSynchronizedTemplates3D::EXECUTE_EXTENT(), ext,6);
+      }
+  }
+
+
+  inline bool IsInterior(const double* x, const vtkBoundingBox& bb)
+  {
+    for(int d=0; d<3; d++)
+      {
+      if(x[d]<=bb.GetMinPoint()[d] || x[d]>=bb.GetMaxPoint()[d])
+        {
+        return false;
+        }
+      }
+    return true;
+  }
+
+//----------------------------------------------------------------------------
+// returns the next pointer in dest
+  vtkIdType *AppendCells(vtkIdType *pDest, vtkCellArray *src, vtkIdType* vertexMap)
+  {
+    vtkIdType *pSrc, *end, *pNum;
+
+    if (src == NULL)
+      {
+      return pDest;
+      }
+
+    pSrc = src->GetPointer();
+    end = pSrc + src->GetNumberOfConnectivityEntries();
+    pNum = pSrc;
+
+    while (pSrc < end)
+      {
+      if (pSrc == pNum)
+        {
+        // move cell pointer to next cell
+        pNum += 1+*pSrc;
+        // copy the number of cells
+        *pDest++ = *pSrc++;
+        }
+      else
+        {
+        // offset the point index
+        *pDest++ = vertexMap[*pSrc++];
+        }
+      }
+
+    return pDest;
+  }
+  vtkSmartPointer<vtkPolyData> CleanMerge(vtkPolyData** inputs, vtkBoundingBox* bounds, int n)
+  {
+    typedef std::vector<vtkIdType> IdVector;
+    typedef std::vector<unsigned char> BoolVector;
+
+    vtkSmartPointer<vtkPolyData> output = vtkSmartPointer<vtkPolyData>::New();
+    vtkIdType numPts(0);
+    vtkIdType numCells(0);
+    double bb[6];
+    vtkBoundingBox bBox;
+    for(int i=0; i<n; i++)
+      {
+      numPts+=inputs[i]->GetNumberOfPoints();
+      numCells+=inputs[i]->GetNumberOfCells();
+      bBox.AddBox(bounds[i]);
+      }
+    bBox.GetBounds(bb);
+
+    vtkSmartPointer<vtkCellArray> newPolys = vtkSmartPointer<vtkCellArray>::New();
+    newPolys->Allocate(numCells);
+    output->SetPolys(newPolys);
+
+    vtkPointData *outputPD = output->GetPointData();
+    vtkCellData  *outputCD = output->GetCellData();
+    outputPD->CopyAllocate(inputs[0]->GetPointData());
+    vtkFieldData::BasicIterator outputPDFieldIter = outputPD->GetRequiredArrays();
+    outputCD->CopyAllocate(inputs[0]->GetCellData());
+    vtkFieldData::BasicIterator outputCDFieldIter = outputCD->GetRequiredArrays();
+    vtkSmartPointer<vtkPoints> outPts;
+    outPts.TakeReference(inputs[0]->GetPoints()->NewInstance());
+    outPts->SetDataType(inputs[0]->GetPoints()->GetDataType());
+    outPts->Allocate(numPts);
+    output->SetPoints(outPts);
+
+    //newIndices[i][j] gives the new index of point j in inputs[i]
+    std::vector<IdVector> newIndexes(n);
+    for(int i=0; i<n; i++)
+      {
+      newIndexes[i].resize(inputs[i]->GetNumberOfPoints(),-1);
+      }
+
+    //the set of boundary points in input i
+    typedef std::pair<vtkIdType,vtkIdType> Run;
+    typedef std::vector<Run> RunArray;
+    typedef std::vector<RunArray> RunArray2;
+    RunArray2 interiorPts(n);
+
+    //First identify all boundary points and insert those. Duplicates
+    //will be handled by vtkMergePoints.
+    //interiorPoints will be constructed in the process.
+    vtkNew<vtkMergePoints> locator;
+    locator->SetTolerance(0);
+    locator->InitPointInsertion(outPts, bb);
+
+    for(int polyDataIndex=0;  polyDataIndex<n;  polyDataIndex++)
+      {
+      vtkPolyData* input  = inputs[polyDataIndex];
+      vtkPoints   *inPts = input->GetPoints();
+      vtkIdType   inNumPts = input->GetNumberOfPoints();
+      vtkPointData *inputPD = input->GetPointData();
+      const vtkBoundingBox& bound = bounds[polyDataIndex];
+      RunArray& interior(interiorPts[polyDataIndex]);
+      IdVector& newIndex(newIndexes[polyDataIndex]);
+      for (vtkIdType i=0; i<inNumPts; i++ )
+        {
+        double x[3];
+        inPts->GetPoint(i,x);
+
+        if(IsInterior(x,bound))
+          {
+          if(interior.empty() || i>interior.back().second+1)
+            {
+            interior.push_back(Run(i,i));
+            }
+          else
+            {
+            interior.back().second++;
+            }
+          }
+        else
+          {
+          vtkIdType ptId;
+          if(locator->InsertUniquePoint(x, ptId))
+            {
+            outputPD->CopyData(inputPD,i,ptId);
+            }
+          newIndex[static_cast<size_t>(i)] = ptId;
+          }
+        }
+      }
+
+    //insert all interior points
+    for(int polyDataIndex=0;  polyDataIndex<n;  polyDataIndex++)
+      {
+      vtkPolyData* input  = inputs[polyDataIndex];
+      vtkPoints   *inPts = input->GetPoints();
+      vtkPointData *inputPD = input->GetPointData();
+
+      IdVector& newIndex(newIndexes[polyDataIndex]);
+
+      const RunArray& interior(interiorPts[polyDataIndex]);
+      for(RunArray::const_iterator it=interior.begin();it!=interior.end(); it++)
+        {
+        vtkIdType first = (*it).first;
+        vtkIdType last = (*it).second;
+
+        for(vtkIdType i = first, ptId=outPts->GetNumberOfPoints(); i<= last; i++,ptId++)
+          {
+          newIndex[static_cast<size_t>(i)] = ptId;
+          }
+        outPts->AppendPoints(inPts, first, last-first+1);
+        }
+
+      for(int field=outputPDFieldIter.BeginIndex(); !outputPDFieldIter.End(); field=outputPDFieldIter.NextIndex())
+        {
+        for(RunArray::const_iterator it=interior.begin();it!=interior.end(); it++)
+          {
+          vtkIdType first = (*it).first;
+          vtkIdType last = (*it).second;
+          int size = last-first+1;
+          outputPD->CopyData(inputPD,field,first,newIndex[static_cast<size_t>(first)],size);
+          }
+        }
+      }
+
+    //insert all cells
+    vtkIdType sizePolys(0);
+    for(int polyDataIndex=0;  polyDataIndex<n;  polyDataIndex++)
+      {
+      sizePolys += inputs[polyDataIndex]->GetPolys()->GetNumberOfConnectivityEntries();
+      }
+    vtkIdType * dst = newPolys->WritePointer(numCells, sizePolys);
+    vtkIdType iOutCells(0);
+    for(int polyDataIndex=0;  polyDataIndex<n;  polyDataIndex++)
+      {
+      vtkPolyData* input  = inputs[polyDataIndex];
+      vtkCellArray *inPolys  = input->GetPolys();
+      vtkCellData  *inputCD = input->GetCellData();
+      IdVector& newIndex(newIndexes[polyDataIndex]);
+      vtkIdType inputNumCells = inPolys->GetNumberOfCells();
+
+      dst = AppendCells(dst,inPolys, &newIndex[0]);
+      for(int field=outputCDFieldIter.BeginIndex(); !outputCDFieldIter.End(); field=outputCDFieldIter.NextIndex())
+        {
+        outputCD->CopyData(inputCD,field, 0, iOutCells, inputNumCells);
+        }
+      iOutCells+= inputNumCells;
+      }
+
+    return output;
+  }
+
+  inline void ComputeImageBounds(double* origin,double* spacing, int* extent, double bb[6])
+  {
+    bb[0] = origin[0] + (extent[0] * spacing[0]);
+    bb[2] = origin[1] + (extent[2] * spacing[1]);
+    bb[4] = origin[2] + (extent[4] * spacing[2]);
+
+    bb[1] = origin[0] + (extent[1] * spacing[0]);
+    bb[3] = origin[1] + (extent[3] * spacing[1]);
+    bb[5] = origin[2] + (extent[5] * spacing[2]);
+  }
+
+};
+
+
 //----------------------------------------------------------------------------
 // Description:
 // Construct object with initial scalar range (0,1) and single contour value
@@ -673,7 +950,7 @@ void vtkSynchronizedTemplates3D::ThreadedExecute(vtkImageData *data,
 
   if ( exExt[0] >= exExt[1] || exExt[2] >= exExt[3] || exExt[4] >= exExt[5] )
     {
-    vtkDebugMacro(<<"3D structured contours requires 3D data");
+    vtkDebugMacro("3D structured contours requires 3D data");
     return;
     }
 
@@ -704,6 +981,41 @@ void vtkSynchronizedTemplates3D::ThreadedExecute(vtkImageData *data,
 }
 
 //----------------------------------------------------------------------------
+int vtkSynchronizedTemplates3D::ProcessRequest(vtkInformation* request,
+                                               vtkInformationVector** inputVector,
+                                               vtkInformationVector* outputVector)
+{
+  if(request->Has(vtkThreadedCompositeDataPipeline::REQUEST_DIVIDE()))
+    {
+    vtkInformation* pInput =inputVector[this->GetParallelInputPort()]->GetInformationObject(0);
+    SplitImage(pInput, vtkThreadedCompositeDataPipeline::NumChunks, outputVector);
+    return 1;
+    }
+  else if(request->Has(vtkThreadedCompositeDataPipeline::REQUEST_MERGE()))
+    {
+    vtkInformationVector* input = inputVector[0];
+    int numChunks = input->GetNumberOfInformationObjects();
+    std::vector<vtkBoundingBox> imageBounds;
+
+    std::vector<vtkPolyData*> outputs;
+    for(int i=0; i<numChunks; i++)
+      {
+      // vtkImageData* image_i = vtkImageData::GetData(input->GetInformationObject(i));
+      // assert(image0->GetOrigin()[0] == image_i->GetOrigin()[0]);
+      double* bb = input->GetInformationObject(i)->Get(BOUNDING_BOX());
+      assert(bb);
+      vtkPolyData* out = vtkPolyData::GetData(input->GetInformationObject(i));
+      imageBounds.push_back(vtkBoundingBox(bb));
+      outputs.push_back(out);
+      }
+    vtkSmartPointer<vtkPolyData> out = CleanMerge(&outputs[0],&imageBounds[0],numChunks);
+    outputVector->GetInformationObject(ParallelOutputPort)->Set(vtkDataObject::DATA_OBJECT(), out);
+    }
+
+  return this->Superclass::ProcessRequest(request, inputVector, outputVector);
+}
+
+//----------------------------------------------------------------------------
 int vtkSynchronizedTemplates3D::RequestData(
   vtkInformation *request,
   vtkInformationVector **inputVector,
@@ -713,7 +1025,7 @@ int vtkSynchronizedTemplates3D::RequestData(
   vtkInformation *inInfo = inputVector[0]->GetInformationObject(0);
   vtkInformation *outInfo = outputVector->GetInformationObject(0);
 
-  int* executeExtent = outInfo->Get(EXECUTE_EXTENT());
+  int* executeExtent = inInfo->Get(EXECUTE_EXTENT());
 
   // get the input and output
   vtkImageData *input = vtkImageData::SafeDownCast(
@@ -722,7 +1034,10 @@ int vtkSynchronizedTemplates3D::RequestData(
     outInfo->Get(vtkDataObject::DATA_OBJECT()));
 
   // to be safe recompute the
-  this->RequestUpdateExtent(request,inputVector,outputVector);
+  if(0) //disabling this to get experimental multithreading code to work
+    {
+    this->RequestUpdateExtent(request,inputVector,outputVector);
+    }
 
   vtkDataArray *inScalars = this->GetInputArrayToProcess(0,inputVector);
 
@@ -731,6 +1046,9 @@ int vtkSynchronizedTemplates3D::RequestData(
 
   output->Squeeze();
 
+  double bb[6];
+  ComputeImageBounds(input->GetOrigin(), input->GetSpacing(), executeExtent,bb);
+  outInfo->Set(BOUNDING_BOX(),bb,6);
   return 1;
 }
 
@@ -765,7 +1083,6 @@ int vtkSynchronizedTemplates3D::RequestUpdateExtent(
   // Start with the whole grid.
   inInfo->Get(vtkStreamingDemandDrivenPipeline::WHOLE_EXTENT(), ext);
 
-  // get the extent associated with the piece.
   if (translator == NULL)
     {
     // Default behavior
@@ -795,7 +1112,10 @@ int vtkSynchronizedTemplates3D::RequestUpdateExtent(
   executeExtent[5] = ext[5];
 
   // Set the update extent of the output.
-  outInfo->Set(EXECUTE_EXTENT(), executeExtent, 6);
+  if(!EmptyExtent(executeExtent))
+    {
+    inInfo->Set(EXECUTE_EXTENT(), executeExtent, 6);
+    }
 
   // expand if we need to compute gradients
   if (this->ComputeGradients || this->ComputeNormals)

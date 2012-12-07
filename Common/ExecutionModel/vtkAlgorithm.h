@@ -184,6 +184,7 @@ public:
   // Update the progress of the process object. If a ProgressMethod exists,
   // executes it.  Then set the Progress ivar to amount. The parameter amount
   // should range between (0,1).
+  // WARNING: Not thread safe
   void UpdateProgress(double amount);
 
   // Description:
@@ -561,7 +562,9 @@ public:
   }
   int GetUpdateGhostLevel(int port);
 
-protected:
+  virtual int GetParallelInputPort() const { return -1;}
+
+ protected:
   vtkAlgorithm();
   ~vtkAlgorithm();
 

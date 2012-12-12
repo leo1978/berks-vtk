@@ -136,6 +136,9 @@ int vtkThreshold::RequestData(
   outCD->CopyGlobalIdsOn();
   outCD->CopyAllocate(cd);
 
+  LazyCopy copyPD(pd,outPD);
+  LazyCopy copyCD(cd,outCD);
+
   numPts = input->GetNumberOfPoints();
   output->Allocate(input->GetNumberOfCells());
 
@@ -217,7 +220,8 @@ int vtkThreshold::RequestData(
           input->GetPoint(ptId, x);
           newId = newPoints->InsertNextPoint(x);
           pointMap->SetId(ptId,newId);
-          outPD->CopyData(pd,ptId,newId);
+          // outPD->CopyData(pd,ptId,newId);
+          copyPD.Copy(ptId,newId);
           }
         newCellPts->InsertId(i,newId);
         }
@@ -232,11 +236,14 @@ int vtkThreshold::RequestData(
           newCellPts, pointMap->GetPointer(0));
         }
       newCellId = output->InsertNextCell(cell->GetCellType(),newCellPts);
-      outCD->CopyData(cd,cellId,newCellId);
+      // outCD->CopyData(cd,cellId,newCellId);
+      copyCD.Copy(cellId,newCellId);
       newCellPts->Reset();
       } // satisfied thresholding
     } // for all cells
 
+  copyPD.Flush();
+  copyCD.Flush();
   vtkDebugMacro(<< "Extracted " << output->GetNumberOfCells()
                 << " number of cells.");
 
@@ -248,7 +255,6 @@ int vtkThreshold::RequestData(
   newPoints->Delete();
 
   output->Squeeze();
-
   return 1;
 }
 

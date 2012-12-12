@@ -63,6 +63,10 @@ public:
   // Note that memory allocation is performed as necessary to hold the data.
   virtual void InsertTuple(vtkIdType i, vtkIdType j, vtkAbstractArray* source);
 
+  // Description:
+  // Insert the jth tuple in the source array, at ith location in this array.
+  // Note that memory allocation is performed as necessary to hold the data.
+  virtual void InsertTupleFast(vtkIdType i, vtkIdType j, vtkAbstractArray* source);
 
   // Description:
   // Insert the jth tuple in the source array, at ith location in this array.
@@ -290,6 +294,13 @@ protected:
 
   virtual void ComputeScalarRange(int comp);
   virtual void ComputeVectorRange();
+
+    // Description:
+  // Get the address of a particular data index. Make sure data is allocated
+  // for the number of items requested. Set MaxId according to the number of
+  // data values requested.
+  T* AppendPointer();
+
 private:
   vtkDataArrayTemplate(const vtkDataArrayTemplate&);  // Not implemented.
   void operator=(const vtkDataArrayTemplate&);  // Not implemented.

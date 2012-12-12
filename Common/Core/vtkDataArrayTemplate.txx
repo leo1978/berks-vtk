@@ -517,6 +517,37 @@ void vtkDataArrayTemplate<T>::InsertTupleFast(vtkIdType i, vtkIdType j, int size
     {
     this->MaxId = maxId;
     }
+  this->DataChanged();
+}
+
+//----------------------------------------------------------------------------
+// Insert the jth tuple in the source array, at ith location in this array.
+// Note that memory allocation is performed as necessary to hold the data.
+template<class T>
+void vtkDataArrayTemplate<T>::InsertTupleFast(vtkIdType i, vtkIdType j,
+  vtkAbstractArray* source)
+{
+  vtkIdType locOut = i * this->NumberOfComponents;
+  vtkIdType maxSize = locOut + this->NumberOfComponents;
+  if (maxSize > this->Size)
+    {
+    if (this->ResizeAndExtend(maxSize)==0)
+      {
+      return;
+      }
+    }
+  vtkIdType locIn = j * this->NumberOfComponents;
+  T* outPtr = this->GetPointer(locOut);
+  T* inPtr = static_cast<T*>(source->GetVoidPointer(locIn));
+
+  memcpy(outPtr, inPtr, this->NumberOfComponents*sizeof(T));
+
+  vtkIdType maxId = maxSize-1;
+  if ( maxId > this->MaxId )
+    {
+    this->MaxId = maxId;
+    }
+  this->DataChanged();
 }
 
 //----------------------------------------------------------------------------
@@ -755,7 +786,7 @@ void vtkDataArrayTemplate<T>::InsertTupleValue(vtkIdType i, const T* tuple)
 template <class T>
 vtkIdType vtkDataArrayTemplate<T>::InsertNextTuple(const float* tuple)
 {
-  T* t = this->WritePointer(this->MaxId + 1, this->NumberOfComponents);
+  T* t = this->AppendPointer();
   if (t==0)
     {
     return -1;
@@ -765,15 +796,14 @@ vtkIdType vtkDataArrayTemplate<T>::InsertNextTuple(const float* tuple)
     {
     *t++ = static_cast<T>(*tuple++);
     }
-
   this->DataChanged();
-  return this->MaxId / this->NumberOfComponents;
+  return ++this->MaxTupleId;
 }
 
 template <class T>
 vtkIdType vtkDataArrayTemplate<T>::InsertNextTuple(const double* tuple)
 {
-  T* t = this->WritePointer(this->MaxId + 1,this->NumberOfComponents);
+  T* t = this->AppendPointer();
   if (t==0)
     {
     return -1;
@@ -785,7 +815,7 @@ vtkIdType vtkDataArrayTemplate<T>::InsertNextTuple(const double* tuple)
     }
 
   this->DataChanged();
-  return this->MaxId / this->NumberOfComponents;
+  return ++this->MaxTupleId;
 }
 
 template <class T>
@@ -803,7 +833,7 @@ vtkIdType vtkDataArrayTemplate<T>::InsertNextTupleValue(const T* tuple)
     }
 
   this->DataChanged();
-  return this->MaxId / this->NumberOfComponents;
+  return ++this->MaxTupleId;
 }
 
 //----------------------------------------------------------------------------
@@ -846,6 +876,7 @@ template <class T>
 void vtkDataArrayTemplate<T>::RemoveLastTuple()
 {
   this->Resize(this->GetNumberOfTuples()- 1);
+  --this->MaxTupleId;
   this->DataChanged();
 }
 
@@ -908,6 +939,24 @@ T* vtkDataArrayTemplate<T>::WritePointer(vtkIdType id,
     }
   this->DataChanged();
   return this->Array + id;
+}
+
+
+//----------------------------------------------------------------------------
+template <class T>
+T* vtkDataArrayTemplate<T>::AppendPointer()
+{
+  vtkIdType size = this->MaxId +  1;
+  vtkIdType newSize= size + this->NumberOfComponents;
+  if ( newSize > this->Size )
+    {
+    if (this->ResizeAndExtend(newSize)==0)
+      {
+      return 0;
+      }
+    }
+  this->MaxId = newSize-1;
+  return this->Array + size;
 }
 
 //----------------------------------------------------------------------------

@@ -376,6 +376,7 @@ protected:
 
   vtkLookupTable *LookupTable;
   double Range[2];
+  int MaxTupleId;
 
 private:
   double* GetTupleN(vtkIdType i, int n);

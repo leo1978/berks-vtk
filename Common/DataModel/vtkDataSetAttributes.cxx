@@ -2190,3 +2190,127 @@ void vtkDataSetAttributes::FieldList::PrintSelf(ostream &os, vtkIndent indent)
        << "}" << endl;
     }
 }
+
+
+//--------------------------------------------------------------------------
+LazyCopy::LazyCopy(vtkDataSetAttributes* src, vtkDataSetAttributes* dst):Src(src), Dst(dst)
+{
+  assert(src!=dst); //maybe later
+
+  // dst->CopyAllocate(src); //assert: This must be done before!
+
+  this->NumArr=0;
+  for(int i=dst->RequiredArrays.BeginIndex(); !dst->RequiredArrays.End();
+      i=dst->RequiredArrays.NextIndex())
+    {
+    vtkAbstractArray* srcArr = src->Data[i];
+    vtkAbstractArray* dstArr = dst->Data[dst->TargetIndices[i]];
+    if (srcArr->GetDataType() != dstArr->GetDataType())
+      {
+      assert(false);
+      }
+    if (srcArr->GetNumberOfComponents() != dstArr->GetNumberOfComponents())
+      {
+      assert(false);
+      }
+    this->NumArr++;
+    }
+  this->DstArr = new vtkAbstractArray*[this->NumArr];
+  this->SrcArr = new vtkAbstractArray*[this->NumArr];
+  this->NumComp = new int[this->NumArr];
+  vtkAbstractArray** sr=SrcArr;
+  vtkAbstractArray** dr=DstArr;
+  int* numComp = this->NumComp;
+
+  for(int i=dst->RequiredArrays.BeginIndex(); !dst->RequiredArrays.End();
+      i=dst->RequiredArrays.NextIndex(),++sr,++dr,++numComp)
+    {
+    (*sr) = src->Data[i];
+    (*dr) = dst->Data[dst->TargetIndices[i]];
+    (*numComp)=(*sr)->GetNumberOfComponents();
+    }
+}
+
+LazyCopy::~LazyCopy()
+{
+}
+
+void LazyCopy::Copy(vtkIdType from, vtkIdType to)
+{
+  if( this->Op.Len!=0
+      && from==this->Op.From + this->Op.Len
+      &&  to==this->Op.To+ this->Op.Len)
+    {
+    ++this->Op.Len;
+    }
+  else
+    {
+    this->Flush();
+    this->Op.From = from;
+    this->Op.To = to;
+    this->Op.Len = 1;
+    }
+}
+
+void LazyCopy::Flush()
+{
+  for(int j=0; j<this->NumArr; j++)
+    {
+    this->DstArr[j]->InsertTupleFast(this->Op.To, this->Op.From, this->Op.Len, this->SrcArr[j]);
+    }
+  Op.Len=0;
+}
+
+//-------------------------------------------------------------------------------------------------
+
+CopyHelper::CopyHelper(vtkDataSetAttributes* src, vtkDataSetAttributes* dst):Src(src), Dst(dst)
+{
+  assert(src!=dst); //maybe later
+  //  dst->CopyAllocate(src); //must be done before!
+
+  this->NumArr=0;
+  for(int i=dst->RequiredArrays.BeginIndex(); !dst->RequiredArrays.End();
+      i=dst->RequiredArrays.NextIndex())
+    {
+    vtkAbstractArray* srcArr = src->Data[i];
+    vtkAbstractArray* dstArr = dst->Data[dst->TargetIndices[i]];
+    if (srcArr->GetDataType() != dstArr->GetDataType())
+      {
+      assert(false);
+      }
+    if (srcArr->GetNumberOfComponents() != dstArr->GetNumberOfComponents())
+      {
+      assert(false);
+      }
+    this->NumArr++;
+    }
+  this->DstArr = new vtkAbstractArray*[this->NumArr];
+  this->SrcArr = new vtkAbstractArray*[this->NumArr];
+  this->NumComp = new int[this->NumArr];
+  vtkAbstractArray** sr=SrcArr;
+  vtkAbstractArray** dr=DstArr;
+  int* numComp = this->NumComp;
+
+  for(int i=dst->RequiredArrays.BeginIndex(); !dst->RequiredArrays.End();
+      i=dst->RequiredArrays.NextIndex(),++sr,++dr,++numComp)
+    {
+    (*sr) = src->Data[i];
+    (*dr) = dst->Data[dst->TargetIndices[i]];
+    (*numComp)=(*sr)->GetNumberOfComponents();
+    }
+}
+
+CopyHelper::~CopyHelper()
+{
+  delete[] this->SrcArr;
+  delete[] this->DstArr;
+  delete[] this->NumComp;
+}
+
+void CopyHelper::Copy(vtkIdType from, vtkIdType to)
+{
+  for(int i=0; i<this->NumArr; i++)
+    {
+    this->DstArr[i]->InsertTupleFast(to, from, this->SrcArr[i]);
+    }
+}

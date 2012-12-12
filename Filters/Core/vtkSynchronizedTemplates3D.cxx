@@ -174,15 +174,32 @@ namespace
     newPolys->Allocate(numCells);
     output->SetPolys(newPolys);
 
+    //Find a non-empty input
+    vtkPolyData* proto(NULL);
+    for(int i=0; i<n; i++)
+      {
+      if(inputs[i] && inputs[i]->GetNumberOfPoints()>0)
+        {
+        proto=inputs[i];
+        }
+      }
+
+    if(!proto)
+      {
+      return NULL;
+      }
+
+    //Allocate the output:
+    // proto -> (outPts, outputPD,outPts,output)
     vtkPointData *outputPD = output->GetPointData();
     vtkCellData  *outputCD = output->GetCellData();
-    outputPD->CopyAllocate(inputs[0]->GetPointData());
+    outputPD->CopyAllocate(proto->GetPointData());
     vtkFieldData::BasicIterator outputPDFieldIter = outputPD->GetRequiredArrays();
-    outputCD->CopyAllocate(inputs[0]->GetCellData());
+    outputCD->CopyAllocate(proto->GetCellData());
     vtkFieldData::BasicIterator outputCDFieldIter = outputCD->GetRequiredArrays();
     vtkSmartPointer<vtkPoints> outPts;
-    outPts.TakeReference(inputs[0]->GetPoints()->NewInstance());
-    outPts->SetDataType(inputs[0]->GetPoints()->GetDataType());
+    outPts.TakeReference(proto->GetPoints()->NewInstance());
+    outPts->SetDataType(proto->GetPoints()->GetDataType());
     outPts->Allocate(numPts);
     output->SetPoints(outPts);
 
@@ -592,6 +609,8 @@ void ContourImage(vtkSynchronizedTemplates3D *self, int *exExt,
   newPts = output->GetPoints();
   newPolys = output->GetPolys();
 
+  CopyHelper copyCD(inCD,outCD);
+
   // this is an exploded execute extent.
   xMin = exExt[0];
   xMax = exExt[1];
@@ -863,7 +882,8 @@ void ContourImage(vtkSynchronizedTemplates3D *self, int *exExt,
                   ptIds[1] != ptIds[2])
                 {
                 outCellId = newPolys->InsertNextCell(3,ptIds);
-                outCD->CopyData(inCD, inCellId, outCellId);
+                copyCD.Copy(inCellId,outCellId);
+//                outCD->CopyData(inCD, inCellId, outCellId);
                 }
               }
             }
@@ -879,7 +899,7 @@ void ContourImage(vtkSynchronizedTemplates3D *self, int *exExt,
       }
     }
   delete [] isect1;
-
+//  copyCD.Flush();
   if (newScalars)
     {
     // Lets set the name of the scalars here.
@@ -959,7 +979,7 @@ void vtkSynchronizedTemplates3D::ThreadedExecute(vtkImageData *data,
   //
   if (inScalars == NULL)
     {
-    vtkDebugMacro("No scalars for contouring.");
+    vtkErrorMacro("No scalars for contouring.");
     return;
     }
   int numComps = inScalars->GetNumberOfComponents();

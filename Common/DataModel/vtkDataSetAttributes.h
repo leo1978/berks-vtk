@@ -564,6 +564,11 @@ public:
     vtkIdList *ids, double *weights);
 
   friend class vtkDataSetAttributes::FieldList;
+  friend class CopyHelper;
+  friend class LazyCopy;
+  friend class MyCopyHelper;
+  friend class MyLazyCopy;
+
 
   vtkFieldData::BasicIterator GetRequiredArrays(){ return this->RequiredArrays;}
 //ETX
@@ -682,6 +687,50 @@ public:
 
   };
 //ETX
+};
+
+
+class VTKCOMMONDATAMODEL_EXPORT LazyCopy
+{
+
+public:
+  LazyCopy(vtkDataSetAttributes* src, vtkDataSetAttributes* dst);
+  ~LazyCopy();
+  void Copy(vtkIdType from, vtkIdType to);
+  void Flush();
+
+private:
+  struct CopyOp
+  {
+    vtkIdType From;
+    vtkIdType To;
+    vtkIdType Len;
+    CopyOp():From(-1),To(-1),Len(0){}
+    CopyOp(vtkIdType from, vtkIdType to):From(from), To(to), Len(1){}
+  };
+  vtkDataSetAttributes* Src;
+  vtkDataSetAttributes* Dst;
+  CopyOp Op; //unfinished copy operation
+  vtkAbstractArray** SrcArr;
+  vtkAbstractArray** DstArr;
+  int NumArr;
+  int* NumComp;
+};
+
+class VTKCOMMONDATAMODEL_EXPORT CopyHelper
+{
+public:
+  CopyHelper(vtkDataSetAttributes* src, vtkDataSetAttributes* dst);
+  ~CopyHelper();
+  void Copy(vtkIdType from, vtkIdType to);
+private:
+  vtkDataSetAttributes* Src;
+  vtkDataSetAttributes* Dst;
+  vtkAbstractArray** SrcArr;
+  vtkAbstractArray** DstArr;
+
+  int NumArr;
+  int* NumComp;
 };
 
 #endif

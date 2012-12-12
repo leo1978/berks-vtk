@@ -51,6 +51,7 @@ vtkDataArray::vtkDataArray(vtkIdType numComp)
 
   this->NumberOfComponents = static_cast<int>(numComp < 1 ? 1 : numComp);
   this->Name = 0;
+  this->MaxTupleId=-1;
 }
 
 //----------------------------------------------------------------------------

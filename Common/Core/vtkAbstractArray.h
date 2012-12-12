@@ -140,6 +140,8 @@ public:
   virtual void InsertTuple(vtkIdType i, vtkIdType j, vtkAbstractArray* source) = 0;
 
   virtual void InsertTupleFast(vtkIdType, vtkIdType, int,vtkAbstractArray*) {return;}
+  virtual void InsertTupleFast(vtkIdType, vtkIdType, vtkAbstractArray* ) {return;};
+
 
   // Description:
   // Insert the jth tuple in the source array, at the end in this array.

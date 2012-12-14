@@ -133,7 +133,7 @@ void ContourImage(vtkSynchronizedTemplatesCutter3D *self, int *exExt,
   int i, j, k;
   int zstep, yisectstep;
   int offsets[12];
-  int *tablePtr;
+  signed char *tablePtr;
   int idx, vidx;
   double x[3], xz[3];
   int v0, v1, v2, v3;

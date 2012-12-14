@@ -180,6 +180,8 @@ int vtkContourFilter::RequestUpdateExtent(vtkInformation* request,
       this->SynchronizedTemplates3D->SetComputeNormals(this->ComputeNormals);
       this->SynchronizedTemplates3D->SetComputeGradients(this->ComputeGradients);
       this->SynchronizedTemplates3D->SetComputeScalars(this->ComputeScalars);
+      this->SynchronizedTemplates3D->SetInputArrayToProcess(0,this->GetInputArrayInformation(0));
+
       return this->SynchronizedTemplates3D->
         ProcessRequest(request,inputVector,outputVector);
       }
@@ -291,17 +293,6 @@ int vtkContourFilter::RequestData(
       }
     else if ( dim == 3 )
       {
-      this->SynchronizedTemplates3D->SetNumberOfContours(numContours);
-      for (i=0; i < numContours; i++)
-        {
-        this->SynchronizedTemplates3D->SetValue(i,values[i]);
-        }
-      this->SynchronizedTemplates3D->SetComputeNormals(this->ComputeNormals);
-      this->SynchronizedTemplates3D->SetComputeGradients(this->ComputeGradients);
-      this->SynchronizedTemplates3D->SetComputeScalars(this->ComputeScalars);
-      this->SynchronizedTemplates3D->
-        SetInputArrayToProcess(0,this->GetInputArrayInformation(0));
-
       return this->SynchronizedTemplates3D->ProcessRequest(request,inputVector,outputVector);
       }
     } //if image data

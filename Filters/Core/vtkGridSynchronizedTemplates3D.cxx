@@ -360,7 +360,7 @@ void ContourGrid(vtkGridSynchronizedTemplates3D *self,
   double t;
   int *isect1Ptr, *isect2Ptr;
   vtkIdType ptIds[3];
-  int *tablePtr;
+  signed char *tablePtr;
   int v0, v1, v2, v3;
   int idx, vidx;
   double value;

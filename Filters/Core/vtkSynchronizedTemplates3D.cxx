@@ -569,7 +569,7 @@ void ContourImage(vtkSynchronizedTemplates3D *self, int *exExt,
   int NeedGradients = ComputeGradients || ComputeNormals;
   double n[3], n0[3], n1[3];
   int jj, g0;
-  int *tablePtr;
+  signed char *tablePtr;
   int idx, vidx;
   double x[3], xz[3];
   int v0, v1, v2, v3;
@@ -854,17 +854,20 @@ void ContourImage(vtkSynchronizedTemplates3D *self, int *exExt,
           if (j > yMin && i < xMax && k > zMin)
             {
             idx = (v0 ? 4096 : 0);
-            idx = idx + (*(isect1Ptr - yisectstep) > -1 ? 2048 : 0);
-            idx = idx + (*(isect1Ptr -yisectstep +1) > -1 ? 1024 : 0);
-            idx = idx + (*(isect1Ptr -yisectstep +2) > -1 ? 512 : 0);
-            idx = idx + (*(isect1Ptr -yisectstep +4) > -1 ? 256 : 0);
-            idx = idx + (*(isect1Ptr -yisectstep +5) > -1 ? 128 : 0);
+
+            int *i0 = isect1Ptr -yisectstep;
+            int *i2 = isect2Ptr -yisectstep;
+            idx = idx + (*(i0) > -1 ? 2048 : 0);
+            idx = idx + (*(i0 +1) > -1 ? 1024 : 0);
+            idx = idx + (*(i0 +2) > -1 ? 512 : 0);
+            idx = idx + (*(i0 +4) > -1 ? 256 : 0);
+            idx = idx + (*(i0 +5) > -1 ? 128 : 0);
             idx = idx + (*(isect1Ptr) > -1 ? 64 : 0);
             idx = idx + (*(isect1Ptr + 2) > -1 ? 32 : 0);
             idx = idx + (*(isect1Ptr + 5) > -1 ? 16 : 0);
-            idx = idx + (*(isect2Ptr -yisectstep) > -1 ? 8 : 0);
-            idx = idx + (*(isect2Ptr -yisectstep +1) > -1 ? 4 : 0);
-            idx = idx + (*(isect2Ptr -yisectstep +4) > -1 ? 2 : 0);
+            idx = idx + (*(i2) > -1 ? 8 : 0);
+            idx = idx + (*(i2 +1) > -1 ? 4 : 0);
+            idx = idx + (*(i2 +4) > -1 ? 2 : 0);
             idx = idx + (*(isect2Ptr) > -1 ? 1 : 0);
 
             tablePtr = VTK_SYNCHRONIZED_TEMPLATES_3D_TABLE_2
@@ -1203,7 +1206,7 @@ void vtkSynchronizedTemplates3D::PrintSelf(ostream& os, vtkIndent indent)
 
 // template table.
 
-int VTK_SYNCHRONIZED_TEMPLATES_3D_TABLE_1[] = {
+short VTK_SYNCHRONIZED_TEMPLATES_3D_TABLE_1[] = {
    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
    0,    0,    0,    0,    0,    0,    0,    0,    0,  592,
    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
@@ -2026,7 +2029,7 @@ int VTK_SYNCHRONIZED_TEMPLATES_3D_TABLE_1[] = {
    0, 1698 };
 
 
-int VTK_SYNCHRONIZED_TEMPLATES_3D_TABLE_2[] = {
+signed char VTK_SYNCHRONIZED_TEMPLATES_3D_TABLE_2[] = {
  -1,   0,   1,   2,  -1,   0,   4,   3,  -1,   3,   1,   2,
   4,   3,   2,  -1,   3,   7,   5,  -1,   0,   1,   2,   3,
   7,   5,  -1,   4,   7,   5,   0,   4,   5,  -1,   5,   1,

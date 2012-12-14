@@ -278,7 +278,7 @@ void ContourRectilinearGrid(vtkRectilinearSynchronizedTemplates *self, int *exEx
   int NeedGradients = ComputeGradients || ComputeNormals;
   double n[3], n0[3], n1[3];
   int jj, g0;
-  int *tablePtr;
+  signed char *tablePtr;
   int idx, vidx;
   double x[3], xz[3];
   int v0, v1, v2, v3;
